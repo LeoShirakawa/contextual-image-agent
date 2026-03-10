@@ -19,7 +19,10 @@ async function getAccessToken(): Promise<string> {
   return tokenResponse.token || "";
 }
 
-export async function createSession(userId: string): Promise<string> {
+export async function createSession(
+  userId: string,
+  state?: Record<string, string>
+): Promise<string> {
   const token = await getAccessToken();
   const res = await fetch(`${getBaseUrl()}:query`, {
     method: "POST",
@@ -29,7 +32,7 @@ export async function createSession(userId: string): Promise<string> {
     },
     body: JSON.stringify({
       class_method: "async_create_session",
-      input: { user_id: userId },
+      input: { user_id: userId, ...(state ? { state } : {}) },
     }),
   });
   const data = await res.json();
@@ -76,8 +79,9 @@ export async function streamQuery(
     if (!dataLine) continue;
     try {
       const data = JSON.parse(dataLine.replace("data:", "").trim());
-      if (data.parts) {
-        for (const part of data.parts) {
+      const parts = data.content?.parts || data.parts;
+      if (parts) {
+        for (const part of parts) {
           if (part.text) {
             const text = part.text;
             // Extract GCS URI from text

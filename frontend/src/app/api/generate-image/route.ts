@@ -20,8 +20,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create a session for this request
-    const sessionId = await createSession(customerId);
+    // Create a session for this request with customer/product state
+    const sessionId = await createSession(customerId, {
+      customer_id: customerId,
+      product_id: productId,
+    });
 
     // Send the personalization request
     const message = `Generate a personalized lifestyle image for customer ${customerId} viewing product ${productId}. The customer_id is ${customerId} and product_id is ${productId}.`;
