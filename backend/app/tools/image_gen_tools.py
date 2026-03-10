@@ -1,6 +1,5 @@
-"""Image generation tool using Gemini 3 Pro Image."""
+"""Image generation tool using Gemini 3 Pro Image - room editing approach."""
 
-import base64
 import uuid
 from datetime import datetime, timezone
 
@@ -36,51 +35,64 @@ def _get_bq_client():
     return _bq_client
 
 
+def _download_gcs_image(gcs_uri: str) -> bytes | None:
+    """Download an image from GCS and return its bytes."""
+    storage_c = _get_storage_client()
+    parts = gcs_uri.replace("gs://", "").split("/", 1)
+    bucket = storage_c.bucket(parts[0])
+    blob = bucket.blob(parts[1])
+    if blob.exists():
+        return blob.download_as_bytes()
+    return None
+
+
 def generate_lifestyle_image(
     prompt: str,
     product_image_gcs_uri: str,
+    room_image_gcs_uri: str,
     customer_id: str,
     product_id: str,
     asset_id: str,
     style_notes: str,
 ) -> dict:
-    """Generates a personalized lifestyle image by compositing a product into a styled scene using Gemini 3 Pro Image.
+    """Generates a personalized lifestyle image by editing a room scene to place a product in it using Gemini 3 Pro Image.
+
+    This tool takes a pre-existing room/background image and a product image,
+    then uses Gemini to edit the room scene by naturally placing the product into it.
 
     Args:
-        prompt: The detailed image generation prompt describing the desired scene, style, and placement.
-        product_image_gcs_uri: GCS URI of the product image to incorporate.
+        prompt: The detailed image editing prompt describing how to place the product in the room.
+        product_image_gcs_uri: GCS URI of the product image to place in the room.
+        room_image_gcs_uri: GCS URI of the room/background scene image to edit.
         customer_id: The customer ID for whom this image is being generated.
         product_id: The product ID being visualized.
         asset_id: The brand asset ID used for the background scene.
         style_notes: Brief description of the personalization applied.
 
     Returns:
-        dict with the generated image GCS URI, base64 data, and style notes.
+        dict with the generated image GCS URI and style notes.
     """
     client = _get_genai_client()
 
-    # Download the product image
-    storage_c = _get_storage_client()
-    parts = product_image_gcs_uri.replace("gs://", "").split("/", 1)
-    bucket = storage_c.bucket(parts[0])
-    blob = bucket.blob(parts[1])
+    # Download both images
+    room_image_bytes = _download_gcs_image(room_image_gcs_uri)
+    product_image_bytes = _download_gcs_image(product_image_gcs_uri)
 
-    product_image_bytes = None
-    if blob.exists():
-        product_image_bytes = blob.download_as_bytes()
+    if room_image_bytes is None:
+        return {"status": "error", "message": f"Room image not found: {room_image_gcs_uri}"}
+    if product_image_bytes is None:
+        return {"status": "error", "message": f"Product image not found: {product_image_gcs_uri}"}
 
-    # Build the request contents
-    contents = []
-    if product_image_bytes:
-        contents.append(
-            types.Part(
-                inline_data=types.Blob(
-                    mime_type="image/png",
-                    data=product_image_bytes,
-                )
-            )
-        )
-    contents.append(types.Part.from_text(text=prompt))
+    # Build the request: room image + product image + editing prompt
+    contents = [
+        types.Part(
+            inline_data=types.Blob(mime_type="image/png", data=room_image_bytes)
+        ),
+        types.Part(
+            inline_data=types.Blob(mime_type="image/png", data=product_image_bytes)
+        ),
+        types.Part.from_text(text=prompt),
+    ]
 
     try:
         response = client.models.generate_content(
@@ -106,6 +118,7 @@ def generate_lifestyle_image(
         # Upload to GCS
         gen_blob_path = f"generated/{customer_id}_{product_id}.png"
 
+        storage_c = _get_storage_client()
         upload_bucket = storage_c.bucket(BUCKET_NAME)
         upload_blob = upload_bucket.blob(gen_blob_path)
         upload_blob.upload_from_string(image_data, content_type="image/png")
