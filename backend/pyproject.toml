@@ -1,0 +1,12 @@
+[project]
+name = "contextual-image-agent-backend"
+version = "0.1.0"
+description = "ADK multi-agent backend for the Contextual Image Agent"
+requires-python = ">=3.11"
+dependencies = [
+    "google-adk>=1.0.0",
+    "google-cloud-bigquery>=3.25.0",
+    "google-cloud-storage>=2.18.0",
+    "google-genai>=1.0.0",
+    "vertexai>=1.43.0",
+]

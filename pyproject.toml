@@ -1,0 +1,10 @@
+[project]
+name = "contextual-image-agent"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "google-cloud-bigquery>=3.40.1",
+    "google-cloud-storage>=3.9.0",
+    "google-genai>=1.66.0",
+]
